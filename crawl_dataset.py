@@ -1,302 +1,318 @@
-from TikTokApi import TikTokApi
-from datetime import datetime
+"""
+Merge Multiple TikTok Datasets
+Gộp tất cả checkpoint và boost data thành 1 dataset hoàn chỉnh
+"""
+
 import json
-import asyncio
-import os
+import pandas as pd
+from pathlib import Path
+from collections import defaultdict
+from datetime import datetime
 
-class TikTokTrendingScraper:
-    def __init__(self):
-        self.api = None
-        
-    async def initialize(self):
-        """Khởi tạo TikTok API"""
-        try:
-            # Khởi tạo API
-            self.api = TikTokApi()
-            await self.api.create_sessions(
-                num_sessions=1,
-                sleep_after=3,
-                headless=True
-            )
-            print("✓ Đã khởi tạo TikTok API thành công!")
-            return True
-        except Exception as e:
-            error_msg = str(e)
-            print(f"✗ Lỗi khi khởi tạo API: {error_msg}")
-            
-            # Kiểm tra lỗi cụ thể về browser
-            if "Executable doesn't exist" in error_msg or "playwright install" in error_msg:
-                print("\n⚠️  Browser chưa được cài đặt!")
-                print("\n🔧 KHẮC PHỤC:")
-                print("   Chạy lệnh sau trong terminal/cmd:")
-                print("   → python -m playwright install chromium")
-                print("\n   Hoặc cài đặt tất cả browsers:")
-                print("   → python -m playwright install")
-            
-            return False
+def load_all_json_files(directory='tiktok_dataset'):
+    """Load tất cả file JSON trong thư mục"""
+    all_videos = []
+    data_dir = Path(directory)
     
-    async def get_trending_videos(self, count=30):
-        """
-        Lấy danh sách video trending từ TikTok
-        
-        Args:
-            count: Số lượng video muốn lấy (mặc định 30)
-        """
-        videos = []
+    if not data_dir.exists():
+        print(f"✗ Thư mục {directory} không tồn tại!")
+        return []
+    
+    json_files = list(data_dir.glob('*.json'))
+    
+    if not json_files:
+        print(f"✗ Không tìm thấy file JSON nào trong {directory}/")
+        return []
+    
+    print(f"📁 Tìm thấy {len(json_files)} files JSON")
+    print("="*60)
+    
+    for filepath in json_files:
+        # Skip statistics file
+        if 'statistics' in filepath.name:
+            continue
         
         try:
-            print(f"Đang lấy {count} video trending...")
-            
-            # Lấy video trending
-            async for video in self.api.trending.videos(count=count):
-                video_info = await self.parse_video(video)
-                if video_info:
-                    videos.append(video_info)
-                    print(f"  ✓ Đã lấy: {video_info['description'][:50]}...")
+            with open(filepath, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                
+                # Handle both list and dict formats
+                if isinstance(data, list):
+                    videos = data
+                elif isinstance(data, dict) and 'videos' in data:
+                    videos = data['videos']
+                else:
+                    continue
+                
+                all_videos.extend(videos)
+                print(f"  ✓ {filepath.name:40s} → {len(videos):>5,} videos")
                 
         except Exception as e:
-            print(f"Lỗi khi lấy dữ liệu: {str(e)}")
-        
-        return videos
+            print(f"  ✗ {filepath.name:40s} → Error: {str(e)[:30]}")
     
-    async def parse_video(self, video):
-        """Parse dữ liệu video"""
-        try:
-            video_dict = video.as_dict
-            stats = video_dict.get('stats', {})
-            author = video_dict.get('author', {})
-            music = video_dict.get('music', {})
-            
-            video_info = {
-                'video_id': video_dict.get('id', ''),
-                'description': video_dict.get('desc', ''),
-                'author': author.get('uniqueId', ''),
-                'author_nickname': author.get('nickname', ''),
-                'author_verified': author.get('verified', False),
-                'music': music.get('title', ''),
-                'music_author': music.get('authorName', ''),
-                'likes': stats.get('diggCount', 0),
-                'comments': stats.get('commentCount', 0),
-                'shares': stats.get('shareCount', 0),
-                'views': stats.get('playCount', 0),
-                'video_url': f"https://www.tiktok.com/@{author.get('uniqueId', '')}/video/{video_dict.get('id', '')}",
-                'hashtags': [tag['title'] for tag in video_dict.get('challenges', [])],
-                'create_time': datetime.fromtimestamp(video_dict.get('createTime', 0)).strftime('%Y-%m-%d %H:%M:%S'),
-                'duration': video_dict.get('video', {}).get('duration', 0),
-            }
-            return video_info
-            
-        except Exception as e:
-            print(f"Lỗi khi parse video: {str(e)}")
-            return None
-    
-    async def search_videos(self, keyword, count=20):
-        """
-        Tìm kiếm video theo từ khóa
-        
-        Args:
-            keyword: Từ khóa tìm kiếm
-            count: Số lượng video
-        """
-        videos = []
-        
-        try:
-            print(f"Đang tìm kiếm: '{keyword}'...")
-            
-            async for video in self.api.search.videos(keyword, count=count):
-                video_info = await self.parse_video(video)
-                if video_info:
-                    videos.append(video_info)
-                    
-        except Exception as e:
-            print(f"Lỗi khi tìm kiếm: {str(e)}")
-        
-        return videos
-    
-    async def get_hashtag_videos(self, hashtag, count=20):
-        """
-        Lấy video từ hashtag
-        
-        Args:
-            hashtag: Tên hashtag (không cần #)
-            count: Số lượng video
-        """
-        videos = []
-        
-        try:
-            print(f"Đang lấy video từ #{hashtag}...")
-            
-            tag = self.api.hashtag(name=hashtag)
-            async for video in tag.videos(count=count):
-                video_info = await self.parse_video(video)
-                if video_info:
-                    videos.append(video_info)
-                    
-        except Exception as e:
-            print(f"Lỗi khi lấy video hashtag: {str(e)}")
-        
-        return videos
-    
-    async def get_user_videos(self, username, count=20):
-        """
-        Lấy video từ user
-        
-        Args:
-            username: Tên user (không cần @)
-            count: Số lượng video
-        """
-        videos = []
-        
-        try:
-            print(f"Đang lấy video từ @{username}...")
-            
-            user = self.api.user(username=username)
-            async for video in user.videos(count=count):
-                video_info = await self.parse_video(video)
-                if video_info:
-                    videos.append(video_info)
-                    
-        except Exception as e:
-            print(f"Lỗi khi lấy video user: {str(e)}")
-        
-        return videos
-    
-    async def close(self):
-        """Đóng API session"""
-        try:
-            if self.api:
-                await self.api.close_sessions()
-                # Đợi một chút để cleanup hoàn tất
-                await asyncio.sleep(0.5)
-        except Exception as e:
-            pass  # Bỏ qua lỗi cleanup
-    
+    return all_videos
 
-def save_to_json(videos, filename='tiktok_trending.json'):
-    """Lưu dữ liệu vào file JSON"""
-    try:
-        with open(filename, 'w', encoding='utf-8') as f:
-            json.dump(videos, f, ensure_ascii=False, indent=2)
-        print(f"\n✓ Đã lưu {len(videos)} video vào {filename}")
-    except Exception as e:
-        print(f"✗ Lỗi khi lưu file: {str(e)}")
+def deduplicate_videos(videos):
+    """Remove duplicates by video_id"""
+    print(f"\n🔄 Deduplicating...")
+    print(f"   Before: {len(videos):,} videos")
+    
+    # Use dict to keep last occurrence
+    unique = {}
+    for video in videos:
+        video_id = video.get('video_id', '')
+        if video_id:
+            unique[video_id] = video
+    
+    unique_videos = list(unique.values())
+    print(f"   After:  {len(unique_videos):,} videos")
+    print(f"   ✓ Removed {len(videos) - len(unique_videos):,} duplicates")
+    
+    return unique_videos
 
-def display_videos(videos):
-    """Hiển thị thông tin video"""
+def analyze_dataset(videos):
+    """Phân tích dataset"""
     print(f"\n{'='*80}")
-    print(f"TỔNG SỐ VIDEO: {len(videos)}")
-    print(f"{'='*80}\n")
+    print("📊 DATASET ANALYSIS")
+    print(f"{'='*80}")
     
-    for i, video in enumerate(videos, 1):
-        verified = "✓" if video.get('author_verified') else ""
-        print(f"[{i}] {video['description'][:60]}...")
-        print(f"    👤 Tác giả: @{video['author']} ({video['author_nickname']}) {verified}")
-        print(f"    ❤️  Likes: {video['likes']:,} | 💬 Comments: {video['comments']:,}")
-        print(f"    👁️  Views: {video['views']:,} | 🔄 Shares: {video['shares']:,}")
-        print(f"    🎵 Nhạc: {video['music']} - {video.get('music_author', '')}")
-        if video['hashtags']:
-            print(f"    #️⃣  Tags: {', '.join(video['hashtags'][:3])}")
-        print(f"    ⏱️  Thời lượng: {video.get('duration', 0)}s | 🕒 Đăng: {video['create_time']}")
-        print(f"    🔗 URL: {video['video_url']}")
-        print()
+    # Basic stats
+    total = len(videos)
+    print(f"\n📈 OVERVIEW:")
+    print(f"   Total videos: {total:,}")
+    
+    # Date range
+    dates = [v['create_date'] for v in videos if 'create_date' in v]
+    if dates:
+        print(f"   Date range: {min(dates)} → {max(dates)}")
+    
+    # By year
+    by_year = defaultdict(int)
+    for v in videos:
+        if 'year' in v:
+            by_year[v['year']] += 1
+    
+    print(f"\n📅 DISTRIBUTION BY YEAR:")
+    for year in sorted(by_year.keys()):
+        count = by_year[year]
+        percentage = (count / total) * 100
+        bar = '█' * int(percentage / 2)
+        print(f"   {year}: {count:>6,} ({percentage:5.1f}%) {bar}")
+    
+    # Top hashtags
+    hashtag_count = defaultdict(int)
+    for v in videos:
+        for tag in v.get('hashtags', []):
+            hashtag_count[tag] += 1
+    
+    top_tags = sorted(hashtag_count.items(), key=lambda x: x[1], reverse=True)[:15]
+    print(f"\n🏷️  TOP 15 HASHTAGS:")
+    for tag, count in top_tags:
+        print(f"   #{tag:20s} → {count:>5,} videos")
+    
+    # Engagement stats
+    total_views = sum(v.get('views', 0) for v in videos)
+    total_likes = sum(v.get('likes', 0) for v in videos)
+    
+    print(f"\n💰 ENGAGEMENT:")
+    print(f"   Total views: {total_views:>15,}")
+    print(f"   Total likes: {total_likes:>15,}")
+    print(f"   Avg views/video: {total_views//total if total > 0 else 0:>10,}")
+    print(f"   Avg likes/video: {total_likes//total if total > 0 else 0:>10,}")
+    
+    # Unique counts
+    unique_authors = len(set(v.get('author_username', '') for v in videos))
+    unique_hashtags = len(hashtag_count)
+    
+    print(f"\n🎯 DIVERSITY:")
+    print(f"   Unique authors: {unique_authors:,}")
+    print(f"   Unique hashtags: {unique_hashtags:,}")
+    
+    return {
+        'total_videos': total,
+        'date_range': {'earliest': min(dates) if dates else None, 'latest': max(dates) if dates else None},
+        'by_year': dict(by_year),
+        'top_hashtags': top_tags[:15],
+        'unique_authors': unique_authors,
+        'unique_hashtags': unique_hashtags,
+        'total_views': total_views,
+        'total_likes': total_likes
+    }
 
-def display_stats(videos):
-    """Hiển thị thống kê"""
-    if not videos:
-        return
+def prepare_for_mining(videos):
+    """Chuẩn bị transaction database"""
+    print(f"\n🔄 Preparing transaction database...")
     
-    total_views = sum(v['views'] for v in videos)
-    total_likes = sum(v['likes'] for v in videos)
-    total_comments = sum(v['comments'] for v in videos)
-    total_shares = sum(v['shares'] for v in videos)
+    transactions = []
     
-    print(f"\n📊 THỐNG KÊ:")
-    print(f"   • Tổng lượt xem: {total_views:,}")
-    print(f"   • Tổng lượt thích: {total_likes:,}")
-    print(f"   • Tổng bình luận: {total_comments:,}")
-    print(f"   • Tổng chia sẻ: {total_shares:,}")
-    print(f"   • Trung bình views/video: {total_views//len(videos):,}")
-    print(f"   • Trung bình likes/video: {total_likes//len(videos):,}")
-
-async def main():
-    """Hàm chính"""
-    print("=" * 80)
-    print("🎵 TikTok Video Scraper với TikTokApi 🎵")
-    print("=" * 80)
-    
-    scraper = TikTokTrendingScraper()
-    
-    # Khởi tạo API
-    if not await scraper.initialize():
-        print("\n⚠️  Không thể khởi tạo TikTok API")
-        print("\n💡 SAU KHI CÀI ĐẶT XONG:")
-        print("   Chạy lại script này: python tiktok_scraper.py")
+    for video in videos:
+        items = set()
         
-        # Cleanup trước khi thoát
-        await scraper.close()
-        return
-    
-    try:
-        # Menu lựa chọn
-        print("\n📋 CHỌN CHỨC NĂNG:")
-        print("1. Lấy video trending")
-        print("2. Tìm kiếm video theo từ khóa")
-        print("3. Lấy video từ hashtag")
-        print("4. Lấy video từ user")
+        # Hashtags (top 5)
+        items.update([f"tag_{tag}" for tag in video.get('hashtags', [])[:5]])
         
-        choice = input("\nNhập lựa chọn (1-4) [mặc định: 1]: ").strip() or "1"
+        # Temporal
+        if 'year' in video:
+            items.add(f"year_{video['year']}")
+        if 'quarter' in video:
+            items.add(f"q{video['quarter']}_{video['year']}")
         
-        videos = []
+        # Music
+        music_title = video.get('music_title', '')
+        if music_title and music_title != 'original sound':
+            items.add(f"music_{music_title[:30]}")
         
-        if choice == "1":
-            count = int(input("Số lượng video [mặc định: 20]: ").strip() or "20")
-            videos = await scraper.get_trending_videos(count=count)
-            
-        elif choice == "2":
-            keyword = input("Nhập từ khóa tìm kiếm: ").strip()
-            count = int(input("Số lượng video [mặc định: 20]: ").strip() or "20")
-            if keyword:
-                videos = await scraper.search_videos(keyword, count=count)
-                
-        elif choice == "3":
-            hashtag = input("Nhập hashtag (không cần #): ").strip()
-            count = int(input("Số lượng video [mặc định: 20]: ").strip() or "20")
-            if hashtag:
-                videos = await scraper.get_hashtag_videos(hashtag, count=count)
-                
-        elif choice == "4":
-            username = input("Nhập username (không cần @): ").strip()
-            count = int(input("Số lượng video [mặc định: 20]: ").strip() or "20")
-            if username:
-                videos = await scraper.get_user_videos(username, count=count)
+        # Author verified
+        if video.get('author_verified'):
+            items.add("verified_author")
         
-        # Hiển thị kết quả
-        if videos:
-            display_videos(videos)
-            display_stats(videos)
-            
-            # Lưu file
-            save = input("\nLưu vào file JSON? (y/n) [mặc định: y]: ").strip().lower()
-            if save != 'n':
-                filename = input("Tên file [mặc định: tiktok_data.json]: ").strip() or "tiktok_data.json"
-                save_to_json(videos, filename)
+        # Engagement level
+        views = video.get('views', 0)
+        likes = video.get('likes', 0)
+        if views > 0:
+            engagement_rate = (likes / views) * 100
+            if engagement_rate > 5:
+                items.add("high_engagement")
+            elif engagement_rate > 2:
+                items.add("medium_engagement")
+            else:
+                items.add("low_engagement")
+        
+        # Duration categories
+        duration = video.get('duration', 0)
+        if duration < 15:
+            items.add("short_video")
+        elif duration < 60:
+            items.add("medium_video")
         else:
-            print("\n⚠️  Không lấy được video nào.")
-            
-    except KeyboardInterrupt:
-        print("\n\n⚠️  Đã dừng chương trình")
-    except Exception as e:
-        print(f"\n✗ Lỗi: {str(e)}")
-    finally:
-        # Đóng API và cleanup
-        print("\n🔄 Đang dọn dẹp...")
-        await scraper.close()
-        print("✓ Hoàn tất!")
+            items.add("long_video")
+        
+        # Popularity
+        if views > 1000000:
+            items.add("viral")
+        elif views > 100000:
+            items.add("popular")
+        elif views > 10000:
+            items.add("trending")
+        else:
+            items.add("normal")
+        
+        if items:
+            transactions.append({
+                'transaction_id': video.get('video_id', ''),
+                'items': list(items),
+                'year': video.get('year', 0),
+                'timestamp': video.get('create_time', ''),
+                'video_url': video.get('video_url', '')
+            })
+    
+    print(f"   ✓ Created {len(transactions):,} transactions")
+    return transactions
+
+def export_merged_data(videos, transactions, output_dir='tiktok_final'):
+    """Export merged dataset"""
+    output_path = Path(output_dir)
+    output_path.mkdir(exist_ok=True)
+    
+    print(f"\n{'='*80}")
+    print("💾 EXPORTING MERGED DATA")
+    print(f"{'='*80}")
+    
+    # 1. Raw JSON
+    raw_file = output_path / 'merged_raw_data.json'
+    with open(raw_file, 'w', encoding='utf-8') as f:
+        json.dump(videos, f, ensure_ascii=False, indent=2)
+    print(f"✓ {raw_file}")
+    
+    # 2. CSV
+    df = pd.DataFrame(videos)
+    csv_file = output_path / 'merged_videos.csv'
+    df.to_csv(csv_file, index=False, encoding='utf-8')
+    print(f"✓ {csv_file}")
+    
+    # 3. Transactions TXT (Apriori format)
+    trans_txt = output_path / 'transactions.txt'
+    with open(trans_txt, 'w', encoding='utf-8') as f:
+        for trans in transactions:
+            f.write(','.join(trans['items']) + '\n')
+    print(f"✓ {trans_txt}")
+    
+    # 4. Transactions JSON
+    trans_json = output_path / 'transactions.json'
+    with open(trans_json, 'w', encoding='utf-8') as f:
+        json.dump(transactions, f, ensure_ascii=False, indent=2)
+    print(f"✓ {trans_json}")
+    
+    # 5. Statistics
+    stats = analyze_dataset(videos)
+    stats_file = output_path / 'final_statistics.json'
+    with open(stats_file, 'w', encoding='utf-8') as f:
+        json.dump(stats, f, ensure_ascii=False, indent=2)
+    print(f"✓ {stats_file}")
+    
+    print(f"\n✅ All data exported to: {output_path}/")
+    
+    return output_path
+
+def main():
+    """Main merge process"""
+    print("="*80)
+    print("🔗 TikTok Dataset Merger")
+    print("="*80)
+    
+    # Input directory
+    input_dir = input("\nNhập thư mục chứa data [tiktok_dataset]: ").strip() or 'tiktok_dataset'
+    
+    # Load all files
+    print(f"\n📂 Loading from: {input_dir}/")
+    all_videos = load_all_json_files(input_dir)
+    
+    if not all_videos:
+        print("\n✗ Không có dữ liệu để merge!")
+        return
+    
+    print(f"\n✓ Loaded {len(all_videos):,} videos total")
+    
+    # Deduplicate
+    unique_videos = deduplicate_videos(all_videos)
+    
+    # Analyze
+    stats = analyze_dataset(unique_videos)
+    
+    # Prepare transactions
+    transactions = prepare_for_mining(unique_videos)
+    
+    # Export
+    output_dir = input("\nNhập thư mục output [tiktok_final]: ").strip() or 'tiktok_final'
+    output_path = export_merged_data(unique_videos, transactions, output_dir)
+    
+    # Final summary
+    print(f"\n{'='*80}")
+    print("✅ MERGE COMPLETED SUCCESSFULLY!")
+    print(f"{'='*80}")
+    print(f"📊 Final dataset: {len(unique_videos):,} videos")
+    print(f"📊 Transactions: {len(transactions):,}")
+    print(f"📅 Years covered: {stats['by_year'].keys()}")
+    print(f"📁 Output: {output_path}/")
+    
+    print(f"\n🎓 READY FOR ANALYSIS:")
+    print(f"   • Raw data: merged_raw_data.json")
+    print(f"   • CSV: merged_videos.csv")
+    print(f"   • Transactions: transactions.txt & transactions.json")
+    print(f"   • Stats: final_statistics.json")
+    
+    print(f"\n💡 NEXT STEPS:")
+    print(f"   1. Áp dụng Apriori/FP-Growth trên transactions.txt")
+    print(f"   2. Khai thác Maximal Frequent Itemsets")
+    print(f"   3. Phân tích temporal patterns")
+    print(f"   4. Làm giàu dữ liệu cho unsupervised learning")
 
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        main()
     except KeyboardInterrupt:
-        print("\n👋 Tạm biệt!")
+        print("\n\n👋 Cancelled!")
     except Exception as e:
-        print(f"\n✗ Lỗi nghiêm trọng: {str(e)}")
+        print(f"\n✗ Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
