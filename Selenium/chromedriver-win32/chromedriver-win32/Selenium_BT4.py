@@ -6,7 +6,7 @@ import time
 driver = webdriver.Chrome()
 for i in range(65, 91):
     url = f'https://en.wikipedia.org/wiki/List_of_painters_by_name_beginning_with_%22{chr(i)}%22'
-    try : 
+    try :
         
         driver.get(url)
         time.sleep(3)
