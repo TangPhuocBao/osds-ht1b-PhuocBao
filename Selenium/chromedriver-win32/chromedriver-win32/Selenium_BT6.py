@@ -5,7 +5,6 @@ import pandas as pd
 import re
 import time
 
-# DataFrame kết quả
 d = pd.DataFrame({
     "name": [],
     "birth": [],
@@ -45,8 +44,6 @@ finally:
     driver.quit()
 
 all_links = list(dict.fromkeys(all_links))
-print("Tổng số link painters (giới hạn):", len(all_links))
-
 
 for idx, link in enumerate(all_links, start=1):
     print(idx, "/", len(all_links), ":", link)
@@ -68,7 +65,6 @@ for idx, link in enumerate(all_links, start=1):
                 By.XPATH, "//th[text()='Born']/following-sibling::td"
             )
             birth_text = birth_element.text
-            # lấy dạng "1 January 1900"
             m = re.findall(r"[0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4}", birth_text)
             birth = m[0]
         except:
@@ -76,9 +72,7 @@ for idx, link in enumerate(all_links, start=1):
 
         # death
         try:
-            death_element = driver.find_element(
-                By.XPATH, "//th[text()='Died']/following-sibling::td"
-            )
+            death_element = driver.find_element(By.XPATH, "//th[text()='Died']/following-sibling::td")
             death_text = death_element.text
             m = re.findall(r"[0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4}", death_text)
             death = m[0]
@@ -87,9 +81,7 @@ for idx, link in enumerate(all_links, start=1):
 
         # nationality
         try:
-            nationality_element = driver.find_element(
-                By.XPATH, "//th[text()='Nationality']/following-sibling::td"
-            )
+            nationality_element = driver.find_element(By.XPATH, "//th[text()='Nationality']/following-sibling::td")
             nationality = nationality_element.text
         except:
             nationality = ""
@@ -106,9 +98,10 @@ for idx, link in enumerate(all_links, start=1):
 
     d = pd.concat([d, pd.DataFrame([painter])], ignore_index=True)
 
-# Xem kết quả
 print(d.head())
 
 # Lưu Excel
 d.to_excel("painters.xlsx", index=False)
 print("Đã lưu file painters.xlsx")
+
+# tim danh sach cac truong dai hoc cao dang tu (ten truong, ma truong, ten hieu truong, url)
