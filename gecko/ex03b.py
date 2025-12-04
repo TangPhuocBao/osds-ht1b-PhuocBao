@@ -4,45 +4,34 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.webdriver import ActionChains
 import time
+import pandas as pd
 import getpass
 
-# Đường dẫn đến geckodriver
-gecko_path = r"C:/KPDL/gecko/geckodriver.exe"
-ser = Service(gecko_path)
-
-# Tùy chọn Firefox
+# Khởi tạo Firefox driver
 options = webdriver.FirefoxOptions()
-options.binary_location = r"C:/Program Files/Mozilla Firefox/firefox.exe"
-options.headless = False  # False để hiển thị browser
+service = Service(r"C:/KPDL/gecko/geckodriver.exe")
+options.binary_location = "C:/Program Files/Mozilla Firefox/firefox.exe"
+driver = webdriver.Firefox(service=service, options=options)
 
-# Khởi tạo driver
-driver = webdriver.Firefox(service=ser, options=options)
+# Truy cập LMS
+driver.get("https://apps.lms.hutech.edu.vn/authn/login?next")
 
-# Truy cập trang login
-url = 'https://apps.lms.hutech.edu.vn/authn/login?next'
-driver.get(url)
+# Nhập email và password
+email = input("Email: ")
+password = getpass.getpass("Password: ")
 
-# Nhập thông tin người dùng
-my_email = input('Please provide your email: ')
-my_password = getpass.getpass('Please provide your password: ')
+time.sleep(2)  # đợi trang load
 
-# Chờ và điền email/username
-username_input = WebDriverWait(driver, 10).until(
-    EC.presence_of_element_located((By.NAME, 'emailOrUsername'))
-)
-username_input.send_keys(my_email)
+driver.find_element(By.NAME, "emailOrUsername").send_keys(email)
+driver.find_element(By.NAME, "password").send_keys(password)
 
-# Điền password
-password_input = driver.find_element(By.NAME, 'password')
-password_input.send_keys(my_password)
+# Nhấn nút login
+driver.find_element(By.ID, "sign-in").click()
 
-# Click nút submit
-login_button = driver.find_element(By.ID, "sign-in").click()
+time.sleep(5)  # đợi đăng nhập
 
-# Chờ vài giây để đăng nhập xong
-time.sleep(5)
-
-# Kết thúc
+print("Đăng nhập xong!")
 driver.quit()
-print("✅ Hoàn thành!")
