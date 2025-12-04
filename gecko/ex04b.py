@@ -28,7 +28,7 @@ try:
     driver.find_element(By.XPATH, "//button[@type='submit']").click()
     
     print("Đã gửi thông tin đăng nhập.")
-    time.sleep(15) # Thời gian chờ để trang chủ load hoặc để bạn giải CAPTCHA
+    time.sleep(15) # Thời gian chờ để trang chủ load
 
     # TÌM KIẾM
     print(f"Đang tìm kiếm: {KEYWORD}")
