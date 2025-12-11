@@ -105,3 +105,39 @@ query_url_check = """
 """
 run_query("URL KHÔNG HỢP LỆ", query_url_check)
 
+query_check = f"""
+SELECT
+    CASE
+        WHEN GIA_BAN < 50000 THEN 'Dưới 50k'
+        WHEN GIA_BAN BETWEEN 50000 AND 100000 THEN '50k - 100k'
+        ELSE 'Trên 100k'
+    END AS nhom_gia,
+    COUNT(*) AS so_san_pham
+FROM VITAMIN
+WHERE GIA_BAN IS NOT NULL
+GROUP BY nhom_gia
+"""
+run_query("Nhóm giá", query_check)
+
+delete_duplicates_sql = """
+WITH to_keep AS (
+    SELECT MIN(rowid) AS keep_id
+    FROM VITAMIN
+    WHERE URL IS NOT NULL AND URL <> ''
+    GROUP BY URL
+)
+DELETE FROM VITAMIN
+WHERE rowid NOT IN (SELECT keep_id FROM to_keep)
+AND URL IN (
+    SELECT URL
+    FROM VITAMIN
+    WHERE URL IS NOT NULL AND URL <> ''
+    GROUP BY URL
+    HAVING COUNT(*) > 1
+);
+"""
+conn.execute(delete_duplicates_sql)
+conn.commit()
+rows = cursor.fetchall()
+for row in rows : 
+    print(row)

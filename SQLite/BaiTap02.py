@@ -272,7 +272,7 @@ for row in rows:
 
 # 10C. Nhóm và đếm số họa sĩ theo quốc tịch
 sql10c = '''
-SELECT nationality, COUNT(*) as painter_count FROM painters
+SELECT nationality, COUNT(*) as [painter_count FROM painters]
 GROUP BY nationality;
 '''
 cursor.execute(sql2a)

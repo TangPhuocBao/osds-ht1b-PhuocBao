@@ -17,12 +17,12 @@ cursor = conn.cursor()
 
 cursor.execute(f"""
 CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
-    MA_SP TEXT PRIMARY KEY,
+    MA_SP TEXT ,
     TEN_SP TEXT,
     GIA_BAN REAL,
     GIA_GOC REAL,
     DVT TEXT,
-    URL TEXT
+    URL PRIMARY KEY TEXT
 );
 """)
 conn.commit()
@@ -56,10 +56,8 @@ for _ in range(12):
                 break
     except:
         pass
-
-# ---------------------------
-# 4) SCROLL TỰ NHIÊN
-# ---------------------------
+    
+# SCROLL TỰ NHIÊN
 for _ in range(150):
     body.send_keys(Keys.ARROW_DOWN)
     time.sleep(random.uniform(0.3, 1.2))
@@ -236,4 +234,3 @@ query_giam_gia = """
 """
 cursor.execute(query_giam_gia)
 conn.commit()
-
